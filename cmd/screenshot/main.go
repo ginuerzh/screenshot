@@ -1,38 +1,60 @@
 package main
 
 import (
-	"context"
+	"flag"
 	"io"
 	"log"
-	"os"
+	"net/http"
+	"strconv"
 
 	"github.com/ginuerzh/screenshot"
 )
 
+var (
+	addr             string
+	chromeRemoteAddr string
+)
+
+func init() {
+	flag.StringVar(&addr, "l", ":8080", "server address")
+	flag.StringVar(&chromeRemoteAddr, "chrome_remote_addr", "127.0.0.1:9222", "chrome websocket debugger endpoint address")
+	flag.Parse()
+}
+
 func main() {
-	sc, err := screenshot.NewChromeRemoteScreenshoter("127.0.0.1:9222")
-	if err != nil {
-		log.Fatal(err)
+	http.HandleFunc("/screenshot", screenshotHandler)
+	log.Fatal(http.ListenAndServe(addr, nil))
+}
+
+func screenshotHandler(w http.ResponseWriter, r *http.Request) {
+	url := r.FormValue("url")
+	width, _ := strconv.ParseInt(r.FormValue("width"), 10, 64)
+	height, _ := strconv.ParseInt(r.FormValue("height"), 10, 64)
+	mobile, _ := strconv.ParseBool(r.FormValue("mobile"))
+	format := r.FormValue("format")
+	quality, _ := strconv.ParseInt(r.FormValue("quality"), 10, 64)
+
+	if url == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 
-	format := "png"
-	r, err := sc.Screenshot(
-		context.Background(),
-		"https://bing.com",
-		screenshot.WidthScreenshotOption(1080),
-		screenshot.HeightScreenshotOption(1920),
-		screenshot.MobileScreenshotOption(true),
+	s, err := screenshot.NewChromeRemoteScreenshoter(chromeRemoteAddr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	rd, err := s.Screenshot(r.Context(), url,
+		screenshot.WidthScreenshotOption(width),
+		screenshot.HeightScreenshotOption(height),
+		screenshot.MobileScreenshotOption(mobile),
 		screenshot.ScaleFactorScreenshotOption(1),
 		screenshot.FormatScreenshotOption(format),
-		screenshot.QualityScreenshotOption(100),
+		screenshot.QualityScreenshotOption(quality),
 	)
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
 	}
-	f, err := os.Create("chrome-screenshot." + format)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer f.Close()
-	io.Copy(f, r)
+	io.Copy(w, rd)
 }
