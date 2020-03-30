@@ -1,0 +1,28 @@
+version: "3"
+services:
+  chrome:
+    image: ginuerzh/alpine-chrome
+    command:
+      - --no-sandbox
+      - --remote-debugging-address=0.0.0.0
+      - --remote-debugging-port=9222
+    networks:
+      - screenshot
+    ports:
+      - 9222:9222
+
+
+  screenshot:
+    image: ginuerzh/screenshot
+    command:
+      - -l=:8080
+      - -chrome_remote_addr=chrome:9222
+    depends_on:
+      - chrome
+    networks:
+      - screenshot
+    ports:
+      - 8080:8080
+
+networks:
+  screenshot:
