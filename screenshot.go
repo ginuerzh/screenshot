@@ -32,7 +32,7 @@ func NewChromeRemoteScreenshoter(addr string) (Screenshoter, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Host", "localhost")
+	req.Host = "localhost"
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
