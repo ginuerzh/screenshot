@@ -6,8 +6,6 @@ WORKDIR /src
 
 ENV GO111MODULE=on
 
-ENV GOPROXY=https://goproxy.io
-
 RUN cd cmd/screenshot && go build
 
 FROM alpine:latest
