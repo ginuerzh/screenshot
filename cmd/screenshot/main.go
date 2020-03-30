@@ -25,6 +25,7 @@ func init() {
 
 func main() {
 	http.HandleFunc("/screenshot", screenshotHandler)
+	log.Println("listen on", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 

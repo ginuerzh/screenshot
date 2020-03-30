@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/page"
@@ -25,17 +26,26 @@ type chromeRemoteScreenshoter struct {
 // NewChromeRemoteScreenshoter creates a Screenshoter backed by Chrome DevTools Protocol.
 // The addr is the headless chrome websocket debugger endpoint, such as 127.0.0.1:9222.
 func NewChromeRemoteScreenshoter(addr string) (Screenshoter, error) {
-	resp, err := http.Get(fmt.Sprintf("http://%s/json/version", addr))
+	// Due to issue#505 (https://github.com/chromedp/chromedp/issues/505),
+	// chrome restricts the host must be IP or localhost, we should rewrite the url.
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s/json/version", addr), nil)
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("Host", "localhost")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
 	var result map[string]interface{}
 	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
 
 	return &chromeRemoteScreenshoter{
-		url: result["webSocketDebuggerUrl"].(string),
+		url: strings.Replace(result["webSocketDebuggerUrl"].(string), "localhost", addr, 1),
 	}, nil
 }
 
