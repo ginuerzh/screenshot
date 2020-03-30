@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: screenshot
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chrome
+  namespace: screenshot
+spec:
+  replicas: 1
+  minReadySeconds: 10
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: chrome
+  template:
+    metadata:
+      name: chrome
+      labels:
+        app: chrome
+    spec:
+      containers:
+      - name: chrome
+        image: ginuerzh/alpine-chrome
+        args:
+        - --no-sandbox
+        - --remote-debugging-address=0.0.0.0
+        - --remote-debugging-port=9222
+        ports:
+        - name: ws
+          containerPort: 9222
+        resources:
+          requests:
+            cpu: 100m
+            memory: 50Mi
+          limits:
+            cpu: 1
+            memory: 100Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: screenshot
+  namespace: screenshot
+spec:
+  replicas: 1
+  minReadySeconds: 10
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: screenshot
+  template:
+    metadata:
+      name: screenshot
+      labels:
+        app: screenshot
+    spec:
+      containers:
+      - name: screenshot
+        image: ginuerzh/screenshot
+        args:
+        - -l=:8080
+        - -chrome_remote_addr=chrome:9222
+        ports:
+        - name: http
+          containerPort: 8080
+        resources:
+          requests:
+            cpu: 100m
+            memory: 10Mi
+          limits:
+            cpu: 500m
+            memory: 50Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chrome
+  namespace: screenshot
+spec:
+  selector:
+    app: chrome
+  ports:
+  - name: ws
+    port: 9222
+    targetPort: ws
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: screenshot
+  namespace: screenshot
+spec:
+  selector:
+    app: screenshot
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: screenshot
+  namespace: screenshot
+  annotations: 
+    kubernetes.io/ingress.class: traefik
+spec:
+  rules:
+  - host: api.ginuerzh.xyz
+    http:
+      paths:
+      - path: /screenshot
+        backend:
+          serviceName: screenshot
+          servicePort: 8080
