@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/ginuerzh/screenshot"
 )
@@ -25,8 +27,13 @@ func init() {
 
 func main() {
 	http.HandleFunc("/screenshot", screenshotHandler)
+	http.HandleFunc("/health", healthHandler)
 	log.Println("listen on", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	return
 }
 
 func screenshotHandler(w http.ResponseWriter, r *http.Request) {
@@ -36,9 +43,14 @@ func screenshotHandler(w http.ResponseWriter, r *http.Request) {
 	mobile, _ := strconv.ParseBool(r.FormValue("mobile"))
 	format := r.FormValue("format")
 	quality, _ := strconv.ParseInt(r.FormValue("quality"), 10, 64)
+	timeout, _ := time.ParseDuration(r.FormValue("timeout"))
 
-	log.Printf("url: %s, width: %d, height: %d, mobile: %v",
-		url, width, height, mobile)
+	if timeout <= time.Second {
+		timeout = 30 * time.Second
+	}
+
+	log.Printf("url: %s, width: %d, height: %d, mobile: %v, timeout: %v",
+		url, width, height, mobile, timeout)
 
 	if url == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -52,7 +64,11 @@ func screenshotHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	rd, err := s.Screenshot(r.Context(), url,
+
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+
+	rd, err := s.Screenshot(ctx, url,
 		screenshot.WidthScreenshotOption(width),
 		screenshot.HeightScreenshotOption(height),
 		screenshot.MobileScreenshotOption(mobile),
@@ -62,6 +78,10 @@ func screenshotHandler(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		log.Println("screenshot:", err)
+		if err == context.DeadlineExceeded {
+			http.Error(w, err.Error(), http.StatusRequestTimeout)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
