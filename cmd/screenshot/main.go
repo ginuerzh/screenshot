@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -21,14 +22,12 @@ func init() {
 	flag.StringVar(&addr, "l", ":8080", "server address")
 	flag.StringVar(&chromeRemoteAddr, "chrome_remote_addr", "127.0.0.1:9222", "chrome websocket debugger endpoint address")
 	flag.Parse()
-
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
 func main() {
 	http.HandleFunc("/screenshot", screenshotHandler)
 	http.HandleFunc("/health", healthHandler)
-	log.Println("listen on", addr)
+	fmt.Println("listen on", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
@@ -49,18 +48,21 @@ func screenshotHandler(w http.ResponseWriter, r *http.Request) {
 		timeout = 30 * time.Second
 	}
 
-	log.Printf("url: %s, width: %d, height: %d, mobile: %v, timeout: %v",
-		url, width, height, mobile, timeout)
+	defer func(start time.Time) {
+		fmt.Printf("%s %s url: %s, width: %d, height: %d, mobile: %v, timeout: %v, duration: %v",
+			start.Format("2006-01-02T15:04:05.999"), r.RemoteAddr,
+			url, width, height, mobile, timeout, time.Since(start))
+	}(time.Now())
 
 	if url == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Println("url is required")
+		fmt.Println("url is required")
 		return
 	}
 
 	s, err := screenshot.NewChromeRemoteScreenshoter(chromeRemoteAddr)
 	if err != nil {
-		log.Println("screenshot:", err)
+		fmt.Println("screenshot:", err)
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
@@ -77,7 +79,7 @@ func screenshotHandler(w http.ResponseWriter, r *http.Request) {
 		screenshot.QualityScreenshotOption(quality),
 	)
 	if err != nil {
-		log.Println("screenshot:", err)
+		fmt.Println("screenshot:", err)
 		if err == context.DeadlineExceeded {
 			http.Error(w, err.Error(), http.StatusRequestTimeout)
 			return
