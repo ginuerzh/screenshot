@@ -62,10 +62,15 @@ func (s *chromeRemoteScreenshoter) Screenshot(ctx context.Context, url string, o
 	}
 
 	var buf []byte
+	captureAction := s.screenshotAction(&buf, opts.Format, opts.Quality)
+	if opts.Format == "pdf" {
+		captureAction = s.printToPDFAction(&buf, page.PrintToPDF())
+	}
+
 	err := chromedp.Run(ctxt,
 		emulation.SetDeviceMetricsOverride(opts.Width, opts.Height, opts.ScaleFactor, opts.Mobile),
 		chromedp.Navigate(url),
-		s.captureAction(&buf, opts.Format, opts.Quality),
+		captureAction,
 		s.closePageAction(),
 	)
 	if err != nil {
@@ -74,7 +79,22 @@ func (s *chromeRemoteScreenshoter) Screenshot(ctx context.Context, url string, o
 	return bytes.NewReader(buf), nil
 }
 
-func (s *chromeRemoteScreenshoter) captureAction(res *[]byte, format string, quality int64) chromedp.Action {
+func (s *chromeRemoteScreenshoter) printToPDFAction(res *[]byte, params *page.PrintToPDFParams) chromedp.Action {
+	return chromedp.ActionFunc(func(ctx context.Context) (err error) {
+		if res == nil {
+			return
+		}
+
+		if params == nil {
+			params = page.PrintToPDF()
+		}
+
+		*res, _, err = params.Do(ctx)
+		return
+	})
+}
+
+func (s *chromeRemoteScreenshoter) screenshotAction(res *[]byte, format string, quality int64) chromedp.Action {
 	return chromedp.ActionFunc(func(ctx context.Context) (err error) {
 		if res == nil {
 			return
